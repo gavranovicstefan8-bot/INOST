@@ -178,8 +178,8 @@
         <div id="file-info">Nijedan fajl nije odabran</div>
     </div>
     
-    <button class="btn-submit" id="btn-main" onclick="submitData()">ARHIVIRAJ U BAZU</button>
-    <button class="btn-submit" id="btn-cancel" style="display:none; background:#444; margin-top:5px;" onclick="resetForm()">PONIŠTI IZMJENU</button>
+    <button class="btn-submit" id="btn-main" onclick="window.submitData()">ARHIVIRAJ U BAZU</button>
+    <button class="btn-submit" id="btn-cancel" style="display:none; background:#444; margin-top:5px;" onclick="window.resetForm()">PONIŠTI IZMJENU</button>
 </div>
 
 <div class="main">
@@ -192,35 +192,52 @@
 
 <div id="qr-container"><div id="qrcode"></div><small>VERIFIKACIJA</small></div>
 
-<script>
-    let zapisi = JSON.parse(localStorage.getItem('krim_baza')) || [];
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getDatabase, ref, push, onValue, set, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyC_c6W9oHc9KOITrwP_rXqmvj46ZuduXBE",
+      authDomain: "inost-database.firebaseapp.com",
+      databaseURL: "https://inost-database-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "inost-database",
+      storageBucket: "inost-database.firebasestorage.app",
+      messagingSenderId: "428365788373",
+      appId: "1:428365788373:web:2d7ab940298a6acd18de5c",
+      measurementId: "G-REBDL7818Y"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const dbRef = ref(db, 'krim_baza');
+
+    let zapisi = [];
     let base64Image = "https://www.svgrepo.com/show/25771/fingerprint.svg";
     const dozvoljeneLozinke = ["Stojana", "Stefan", "Anastasija"];
 
+    // Sat i QR
     setInterval(() => { document.getElementById('clock').innerText = new Date().toLocaleTimeString(); }, 1000);
     new QRCode(document.getElementById("qrcode"), { text: window.location.href, width: 80, height: 80 });
 
-    document.getElementById('file-input').addEventListener('change', function(e) {
-        if (e.target.files[0]) {
-            const reader = new FileReader();
-            reader.onload = (ev) => { 
-                base64Image = ev.target.result; 
-                document.getElementById('file-info').innerText = "Fajl: " + e.target.files[0].name; 
-            };
-            reader.readAsDataURL(e.target.files[0]);
+    // Slušanje baze u realnom vremenu
+    onValue(dbRef, (snapshot) => {
+        const data = snapshot.val();
+        zapisi = [];
+        if (data) {
+            Object.keys(data).forEach(key => {
+                zapisi.push({ id: key, ...data[key] });
+            });
+            zapisi.reverse(); // Najnoviji na vrh
         }
+        renderList();
     });
 
-    function submitData() {
+    // Globalne funkcije dostupne HTML-u
+    window.submitData = function() {
         const lozinkaVal = document.getElementById('lozinka-input').value;
-        
-        if (!dozvoljeneLozinke.includes(lozinkaVal)) {
-            alert("PRISTUP ODBIJEN: Neispravan autorizacioni ključ!");
-            return;
-        }
+        if (!dozvoljeneLozinke.includes(lozinkaVal)) return alert("PRISTUP ODBIJEN!");
 
         const podaci = {
-            id: document.getElementById('edit-id').value || Date.now().toString(),
             ime: document.getElementById('ime').value,
             prezime: document.getElementById('prezime').value,
             status: document.getElementById('status').value,
@@ -232,14 +249,51 @@
 
         if(!podaci.ime || !podaci.prezime) return alert("Ime i prezime su obavezni!");
 
-        const editIndex = zapisi.findIndex(z => z.id === podaci.id);
-        if(editIndex > -1) zapisi[editIndex] = podaci;
-        else zapisi.unshift(podaci);
+        const editId = document.getElementById('edit-id').value;
 
-        localStorage.setItem('krim_baza', JSON.stringify(zapisi));
-        renderList();
-        resetForm();
-    }
+        if(editId) {
+            set(ref(db, 'krim_baza/' + editId), podaci).then(() => resetForm());
+        } else {
+            push(dbRef, podaci).then(() => resetForm());
+        }
+    };
+
+    window.deleteRecord = function(id) {
+        const lozinka = prompt("Unesite lozinku za brisanje:");
+        if (!dozvoljeneLozinke.includes(lozinka)) return alert("Pogrešna lozinka!");
+        if(confirm("Potvrdi brisanje iz baze?")) {
+            remove(ref(db, 'krim_baza/' + id));
+        }
+    };
+
+    window.editRecord = function(id) {
+        const z = zapisi.find(r => r.id === id);
+        if(!z) return;
+        document.getElementById('edit-id').value = z.id;
+        document.getElementById('ime').value = z.ime;
+        document.getElementById('prezime').value = z.prezime;
+        document.getElementById('status').value = z.status;
+        document.getElementById('pol').value = z.pol;
+        document.getElementById('opis').value = z.opis;
+        base64Image = z.otisak;
+        document.getElementById('form-title').innerText = "UREĐIVANJE DOSIJEA";
+        document.getElementById('btn-main').innerText = "SAČUVAJ IZMJENE";
+        document.getElementById('btn-cancel').style.display = "block";
+        document.querySelector('.sidebar').scrollTo(0,0);
+    };
+
+    window.resetForm = function() {
+        document.getElementById('edit-id').value = '';
+        document.getElementById('ime').value = '';
+        document.getElementById('prezime').value = '';
+        document.getElementById('opis').value = '';
+        document.getElementById('lozinka-input').value = '';
+        document.getElementById('form-title').innerText = "TERMINAL UNOSA";
+        document.getElementById('btn-main').innerText = "ARHIVIRAJ U BAZU";
+        document.getElementById('btn-cancel').style.display = "none";
+        document.getElementById('file-info').innerText = "Nijedan fajl nije odabran";
+        base64Image = "https://www.svgrepo.com/show/25771/fingerprint.svg";
+    };
 
     function renderList() {
         const container = document.getElementById('lista-dosijea');
@@ -263,57 +317,25 @@
                         <div style="text-align:right; opacity:0.4; font-size:0.7rem;">ID: #${z.id.slice(-5)}<br>D: ${z.datum}</div>
                     </div>
                     <div class="actions">
-                        <button class="btn-action" onclick="editRecord('${z.id}')">Uredi</button>
-                        <button class="btn-action btn-delete" onclick="deleteRecord('${z.id}')">Obriši</button>
+                        <button class="btn-action" onclick="window.editRecord('${z.id}')">Uredi</button>
+                        <button class="btn-action btn-delete" onclick="window.deleteRecord('${z.id}')">Obriši</button>
                     </div>
                 </div>`;
             container.appendChild(card);
         });
     }
 
-    function deleteRecord(id) {
-        const lozinka = prompt("Unesite lozinku za brisanje:");
-        if (!dozvoljeneLozinke.includes(lozinka)) return alert("Pogrešna lozinka!");
-        
-        if(confirm("Potvrdi brisanje iz baze?")) {
-            zapisi = zapisi.filter(z => z.id !== id);
-            localStorage.setItem('krim_baza', JSON.stringify(zapisi));
-            renderList();
+    // File input logika
+    document.getElementById('file-input').addEventListener('change', function(e) {
+        if (e.target.files[0]) {
+            const reader = new FileReader();
+            reader.onload = (ev) => { 
+                base64Image = ev.target.result; 
+                document.getElementById('file-info').innerText = "Fajl: " + e.target.files[0].name; 
+            };
+            reader.readAsDataURL(e.target.files[0]);
         }
-    }
-
-    function editRecord(id) {
-        const z = zapisi.find(record => record.id === id);
-        if(!z) return;
-
-        document.getElementById('edit-id').value = z.id;
-        document.getElementById('ime').value = z.ime;
-        document.getElementById('prezime').value = z.prezime;
-        document.getElementById('status').value = z.status;
-        document.getElementById('pol').value = z.pol;
-        document.getElementById('opis').value = z.opis;
-        base64Image = z.otisak;
-        
-        document.getElementById('form-title').innerText = "UREĐIVANJE DOSIJEA";
-        document.getElementById('btn-main').innerText = "SAČUVAJ IZMJENE";
-        document.getElementById('btn-cancel').style.display = "block";
-        document.querySelector('.sidebar').scrollTo(0,0);
-    }
-
-    function resetForm() {
-        document.getElementById('edit-id').value = '';
-        document.getElementById('ime').value = '';
-        document.getElementById('prezime').value = '';
-        document.getElementById('opis').value = '';
-        document.getElementById('lozinka-input').value = '';
-        document.getElementById('form-title').innerText = "TERMINAL UNOSA";
-        document.getElementById('btn-main').innerText = "ARHIVIRAJ U BAZU";
-        document.getElementById('btn-cancel').style.display = "none";
-        document.getElementById('file-info').innerText = "Nijedan fajl nije odabran";
-        base64Image = "https://www.svgrepo.com/show/25771/fingerprint.svg";
-    }
-
-    renderList();
+    });
 </script>
 </body>
 </html>
