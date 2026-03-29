@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>INOST CRIMINAL DATABASE V 1.0</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        :root {
+            --maroon: #800000;
+            --maroon-bright: #b30000;
+            --suspect: #ff4d4d;
+            --clear: #4d94ff;
+            --bg: #050505;
+            --panel: #111;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--maroon);
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* --- SIDEBAR --- */
+        .sidebar {
+            width: 400px;
+            background: var(--panel);
+            border-right: 2px solid var(--maroon);
+            display: flex;
+            flex-direction: column;
+            padding: 25px;
+            box-shadow: 10px 0 30px rgba(0,0,0,0.7);
+            z-index: 10;
+            overflow-y: auto;
+        }
+
+        .sidebar h2 { font-size: 1.1rem; text-align: center; border-bottom: 1px solid var(--maroon); padding-bottom: 15px; margin-bottom: 25px; }
+
+        .input-group { margin-bottom: 15px; }
+        label { display: block; font-size: 0.8rem; font-weight: bold; margin-bottom: 5px; color: var(--maroon); }
+        
+        input, select, textarea {
+            width: 100%;
+            background: #000;
+            border: 1px solid #333;
+            color: #fff;
+            padding: 10px;
+            box-sizing: border-box;
+            border-radius: 3px;
+        }
+
+        input:focus, textarea:focus { border-color: var(--maroon-bright); outline: none; }
+
+        .upload-area {
+            width: 100%;
+            height: 100px;
+            border: 2px dashed #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: 0.3s;
+            position: relative;
+            background: rgba(0,0,0,0.4);
+        }
+
+        .upload-area:hover {
+            border-color: var(--maroon-bright);
+            background: rgba(128, 0, 0, 0.15);
+        }
+
+        .btn-submit {
+            background: var(--maroon);
+            color: white;
+            border: none;
+            padding: 15px;
+            width: 100%;
+            font-weight: bold;
+            text-transform: uppercase;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: 0.3s;
+        }
+
+        .btn-submit:hover { background: var(--maroon-bright); box-shadow: 0 0 20px rgba(179, 0, 0, 0.4); }
+
+        /* --- MAIN CONTENT --- */
+        .main { flex-grow: 1; display: flex; flex-direction: column; background: #000; }
+
+        .header {
+            background: #000;
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--maroon);
+        }
+
+        #clock { font-size: 1.2rem; color: #fff; background: var(--panel); padding: 5px 15px; border-left: 3px solid var(--maroon); }
+
+        .list-container { padding: 30px; overflow-y: auto; flex-grow: 1; }
+
+        .entry {
+            background: #121212;
+            border-left: 5px solid var(--maroon);
+            margin-bottom: 15px;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .entry-header {
+            padding: 18px 25px;
+            display: flex;
+            justify-content: space-between;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .entry-body {
+            max-height: 0;
+            padding: 0 25px;
+            overflow: hidden;
+            transition: all 0.5s ease;
+            background: #080808;
+        }
+
+        .entry.expanded .entry-body { max-height: 800px; padding: 25px; border-top: 1px solid #222; }
+
+        .status-suspect { color: var(--suspect); }
+        .status-clear { color: var(--clear); }
+
+        .details-box { display: flex; gap: 30px; align-items: flex-start; }
+
+        .fp-frame { width: 100px; height: 100px; border: 1px solid var(--maroon); background: #000; padding: 5px; }
+        .fp-frame img { width: 100%; height: 100%; object-fit: cover; filter: invert(1) sepia(1) hue-rotate(-50deg); }
+
+        .actions { margin-top: 15px; display: flex; gap: 10px; border-top: 1px solid #222; padding-top: 10px; }
+        .btn-action { background: none; border: 1px solid #444; color: #888; padding: 5px 10px; cursor: pointer; font-size: 0.7rem; text-transform: uppercase; }
+        .btn-action:hover { border-color: var(--maroon); color: #fff; }
+        .btn-delete:hover { border-color: var(--suspect); color: var(--suspect); }
+
+        #qr-container { position: fixed; bottom: 30px; right: 30px; background: #fff; padding: 10px; border-radius: 2px; text-align: center; }
+        #qr-container small { color: #000; display: block; font-weight: bold; font-size: 9px; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <h2 id="form-title">TERMINAL UNOSA</h2>
+    <input type="hidden" id="edit-id">
+    
+    <div class="input-group"><label>IME:</label><input type="text" id="ime" placeholder="..."></div>
+    <div class="input-group"><label>PREZIME:</label><input type="text" id="prezime" placeholder="..."></div>
+    <div class="input-group"><label>STATUS:</label><select id="status"><option value="osumnjicen">OSUMNJICEN</option><option value="nije_osumnjicen">NIJE OSUMNJICEN</option></select></div>
+    <div class="input-group"><label>POL:</label><select id="pol"><option value="Muški">Muški</option><option value="Ženski">Ženski</option></select></div>
+    
+    <div class="input-group">
+        <label>OPIS ZLOČINA I OSOBE:</label>
+        <textarea id="opis" rows="4" placeholder="Unesite detalje..."></textarea>
+    </div>
+    
+    <div class="input-group">
+        <label>AUTORIZACIONI KLJUČ:</label>
+        <input type="password" id="lozinka-input" placeholder="Stojana, Stefan ili Anastasija">
+    </div>
+
+    <div class="input-group">
+        <label>BIOMETRIJA (OTISAK):</label>
+        <div class="upload-area" id="drop-zone" onclick="document.getElementById('file-input').click()">
+            <div class="upload-text">Dovuci fajl ili klikni</div>
+            <input type="file" id="file-input" style="display: none;" accept="image/*">
+        </div>
+        <div id="file-info">Nijedan fajl nije odabran</div>
+    </div>
+    
+    <button class="btn-submit" id="btn-main" onclick="submitData()">ARHIVIRAJ U BAZU</button>
+    <button class="btn-submit" id="btn-cancel" style="display:none; background:#444; margin-top:5px;" onclick="resetForm()">PONIŠTI IZMJENU</button>
+</div>
+
+<div class="main">
+    <div class="header">
+        <h1>INOST CRIMINAL DATABASE V 1.0</h1>
+        <div id="clock">00:00:00</div>
+    </div>
+    <div class="list-container" id="lista-dosijea"></div>
+</div>
+
+<div id="qr-container"><div id="qrcode"></div><small>VERIFIKACIJA</small></div>
+
+<script>
+    let zapisi = JSON.parse(localStorage.getItem('krim_baza')) || [];
+    let base64Image = "https://www.svgrepo.com/show/25771/fingerprint.svg";
+    const dozvoljeneLozinke = ["Stojana", "Stefan", "Anastasija"];
+
+    setInterval(() => { document.getElementById('clock').innerText = new Date().toLocaleTimeString(); }, 1000);
+    new QRCode(document.getElementById("qrcode"), { text: window.location.href, width: 80, height: 80 });
+
+    document.getElementById('file-input').addEventListener('change', function(e) {
+        if (e.target.files[0]) {
+            const reader = new FileReader();
+            reader.onload = (ev) => { 
+                base64Image = ev.target.result; 
+                document.getElementById('file-info').innerText = "Fajl: " + e.target.files[0].name; 
+            };
+            reader.readAsDataURL(e.target.files[0]);
+        }
+    });
+
+    function submitData() {
+        const lozinkaVal = document.getElementById('lozinka-input').value;
+        
+        if (!dozvoljeneLozinke.includes(lozinkaVal)) {
+            alert("PRISTUP ODBIJEN: Neispravan autorizacioni ključ!");
+            return;
+        }
+
+        const podaci = {
+            id: document.getElementById('edit-id').value || Date.now().toString(),
+            ime: document.getElementById('ime').value,
+            prezime: document.getElementById('prezime').value,
+            status: document.getElementById('status').value,
+            pol: document.getElementById('pol').value,
+            opis: document.getElementById('opis').value,
+            otisak: base64Image,
+            datum: new Date().toLocaleDateString()
+        };
+
+        if(!podaci.ime || !podaci.prezime) return alert("Ime i prezime su obavezni!");
+
+        const editIndex = zapisi.findIndex(z => z.id === podaci.id);
+        if(editIndex > -1) zapisi[editIndex] = podaci;
+        else zapisi.unshift(podaci);
+
+        localStorage.setItem('krim_baza', JSON.stringify(zapisi));
+        renderList();
+        resetForm();
+    }
+
+    function renderList() {
+        const container = document.getElementById('lista-dosijea');
+        container.innerHTML = '';
+        zapisi.forEach(z => {
+            const isOsum = z.status === 'osumnjicen';
+            const card = document.createElement('div');
+            card.className = 'entry';
+            card.innerHTML = `
+                <div class="entry-header" onclick="this.parentElement.classList.toggle('expanded')">
+                    <span>${z.ime.toUpperCase()} ${z.prezime.toUpperCase()}</span>
+                    <span class="${isOsum ? 'status-suspect' : 'status-clear'}">[ ${isOsum ? 'OSUMNJIČEN' : 'ČIST'} ]</span>
+                </div>
+                <div class="entry-body">
+                    <div class="details-box">
+                        <div class="fp-frame"><img src="${z.otisak}"></div>
+                        <div style="flex-grow:1">
+                            <p><strong>POL:</strong> ${z.pol}</p>
+                            <p><strong>OPIS:</strong> ${z.opis || 'Nema opisa'}</p>
+                        </div>
+                        <div style="text-align:right; opacity:0.4; font-size:0.7rem;">ID: #${z.id.slice(-5)}<br>D: ${z.datum}</div>
+                    </div>
+                    <div class="actions">
+                        <button class="btn-action" onclick="editRecord('${z.id}')">Uredi</button>
+                        <button class="btn-action btn-delete" onclick="deleteRecord('${z.id}')">Obriši</button>
+                    </div>
+                </div>`;
+            container.appendChild(card);
+        });
+    }
+
+    function deleteRecord(id) {
+        const lozinka = prompt("Unesite lozinku za brisanje:");
+        if (!dozvoljeneLozinke.includes(lozinka)) return alert("Pogrešna lozinka!");
+        
+        if(confirm("Potvrdi brisanje iz baze?")) {
+            zapisi = zapisi.filter(z => z.id !== id);
+            localStorage.setItem('krim_baza', JSON.stringify(zapisi));
+            renderList();
+        }
+    }
+
+    function editRecord(id) {
+        const z = zapisi.find(record => record.id === id);
+        if(!z) return;
+
+        document.getElementById('edit-id').value = z.id;
+        document.getElementById('ime').value = z.ime;
+        document.getElementById('prezime').value = z.prezime;
+        document.getElementById('status').value = z.status;
+        document.getElementById('pol').value = z.pol;
+        document.getElementById('opis').value = z.opis;
+        base64Image = z.otisak;
+        
+        document.getElementById('form-title').innerText = "UREĐIVANJE DOSIJEA";
+        document.getElementById('btn-main').innerText = "SAČUVAJ IZMJENE";
+        document.getElementById('btn-cancel').style.display = "block";
+        document.querySelector('.sidebar').scrollTo(0,0);
+    }
+
+    function resetForm() {
+        document.getElementById('edit-id').value = '';
+        document.getElementById('ime').value = '';
+        document.getElementById('prezime').value = '';
+        document.getElementById('opis').value = '';
+        document.getElementById('lozinka-input').value = '';
+        document.getElementById('form-title').innerText = "TERMINAL UNOSA";
+        document.getElementById('btn-main').innerText = "ARHIVIRAJ U BAZU";
+        document.getElementById('btn-cancel').style.display = "none";
+        document.getElementById('file-info').innerText = "Nijedan fajl nije odabran";
+        base64Image = "https://www.svgrepo.com/show/25771/fingerprint.svg";
+    }
+
+    renderList();
+</script>
+</body>
+</html>
